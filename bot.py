@@ -161,7 +161,7 @@ def stats(uid):
         sum(profit(x) for x in sold),
         sum(cost(x) for x in a if x["status"] != "Продан"),
         sum(float(x["sale"] or 0) for x in sold),
-        sum(float(x["extra"] or 0) for x in a),
+        sum(float(x["extra"] or 0) for x in a) + sum(expense_total(x["id"]) for x in a),
         len(a),
     )
 
@@ -263,10 +263,13 @@ def deal_table(p):
         invested=sum(a for _,a in people)
         if invested>0 and sale>0:
             lines.append("<b>РАСПРЕДЕЛЕНИЕ ПРОДАЖИ</b>")
+            # Прибыль делится строго 50/50. Сначала каждый получает свою
+            # сумму вложений, затем половину общей прибыли. Доп. расходы
+            # уже входят в себестоимость товара.
+            half_profit = pr / 2
             for n,a in people:
-                share=sale*a/invested
-                own_profit=share-a
-                lines.append(f"   {n}: {money(share)}  (прибыль {money(own_profit)})")
+                payout = a + half_profit
+                lines.append(f"   {n}: {money(payout)}  (возврат {money(a)} + прибыль {money(half_profit)})")
         elif sale>0:
             lines.append("<b>РАСПРЕДЕЛЕНИЕ ПРОДАЖИ</b>")
             eq=sale/len(people)
@@ -328,7 +331,7 @@ async def join_code(m,state):
     c.commit(); c.close(); await state.clear()
     await m.answer(f"✅ <b>Готово!</b>\n\nТы подключён к бизнесу <b>{b['name']}</b>.\nТеперь вы с партнёром видите общий список товаров и общую статистику.", parse_mode="HTML", reply_markup=home_kb())
 
-@dp.callback_query(F.data=="products")
+@dp.callback_query(F.data.in_({"products", "back_products"}))
 async def products(c):
     ensure_business(c.from_user.id, c.from_user.full_name)
     b=get_business(c.from_user.id)
