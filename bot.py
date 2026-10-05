@@ -397,8 +397,14 @@ async def leave_partnership(c: CallbackQuery):
         db.execute("DELETE FROM products WHERE business_id=?", (bid,))
         db.execute("DELETE FROM businesses WHERE id=?", (bid,))
     db.commit(); db.close()
-    ensure_business(uid, c.from_user.full_name)
-    await edit_message(c, "🚪 <b>Ты вышел из партнёрства.</b>\n\nТеперь можно подключиться к другому бизнесу по коду.", reply_markup=home_kb())
+    # Важно: после выхода НЕ создаём новый бизнес автоматически.
+    # Иначе пользователь сразу получает новое партнёрство и не может войти
+    # по коду существующего партнёра.
+    await edit_message(c, "🚪 <b>Ты вышел из партнёрства.</b>\n\nТеперь введи код другого бизнеса через «🔗 Войти по коду».",
+                       reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                           [InlineKeyboardButton(text="🔗 Войти по коду", callback_data="join")],
+                           [InlineKeyboardButton(text="🏠 Главная", callback_data="home")]
+                       ]))
     await c.answer("Готово")
 
 
