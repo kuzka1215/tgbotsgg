@@ -284,7 +284,7 @@ async def start(m):
 @dp.callback_query(F.data=="home")
 async def home(c):
     ensure_business(c.from_user.id, c.from_user.full_name)
-    await c.message.edit_text(home_text(c.from_user.id), reply_markup=home_kb(), parse_mode="HTML")
+    await edit_message(c, home_text(c.from_user.id), reply_markup=home_kb(), parse_mode="HTML")
     await c.answer()
 
 @dp.callback_query(F.data=="partnership")
@@ -303,13 +303,13 @@ async def partnership(c):
         [InlineKeyboardButton(text="🔗 Войти по коду", callback_data="join")],
         [InlineKeyboardButton(text="🏠 Главная", callback_data="home")]
     ])
-    await c.message.edit_text("\n".join(lines), reply_markup=kb, parse_mode="HTML")
+    await edit_message(c, "\n".join(lines), reply_markup=kb, parse_mode="HTML")
     await c.answer()
 
 @dp.callback_query(F.data=="join")
 async def join(c,state):
     await state.clear(); await state.set_state(Join.code)
-    await c.message.edit_text("🤝 <b>Подключение к партнёру</b>\n\nВведи код приглашения, например <code>BIZ-ABC123</code>.", parse_mode="HTML")
+    await edit_message(c, "🤝 <b>Подключение к партнёру</b>\n\nВведи код приглашения, например <code>BIZ-ABC123</code>.", parse_mode="HTML")
     await c.answer()
 
 @dp.message(Join.code)
@@ -342,7 +342,13 @@ async def products(c):
         kb.append([InlineKeyboardButton(text=f"{icon(p['category'])} {p['name']} · {s}",callback_data=f"item:{p['id']}")])
     kb += [[InlineKeyboardButton(text="➕ Добавить товар",callback_data="add")],[InlineKeyboardButton(text="🏠 Главная",callback_data="home")]]
     text="📦 <b>Общие товары</b>\n\nНажми на товар:" if rows else "📦 <b>Общие товары</b>\n\nПока нет товаров."
-    await c.message.edit_text(text,reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),parse_mode="HTML"); await c.answer()
+    await edit_message(c, text,reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),parse_mode="HTML"); await c.answer()
+
+async def edit_message(c, text, reply_markup=None, parse_mode="HTML"):
+    """Edit either a normal text message or a photo message with caption."""
+    if c.message.photo:
+        return await c.message.edit_caption(caption=text, reply_markup=reply_markup, parse_mode=parse_mode)
+    return await c.message.edit_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
 
 def get_product_for_user(pid, uid):
     b=get_business(uid)
@@ -385,8 +391,8 @@ async def item(c):
 Заметки: {p['notes'] or '—'}"""
     if p["photo"]:
         try: await c.message.delete(); await c.message.answer_photo(p["photo"],caption=text,reply_markup=product_kb(pid),parse_mode="HTML")
-        except: await c.message.edit_text(text,reply_markup=product_kb(pid),parse_mode="HTML")
-    else: await c.message.edit_text(text,reply_markup=product_kb(pid),parse_mode="HTML")
+        except: await edit_message(c, text,reply_markup=product_kb(pid),parse_mode="HTML")
+    else: await edit_message(c, text,reply_markup=product_kb(pid),parse_mode="HTML")
     await c.answer()
 
 
@@ -399,7 +405,7 @@ async def expense_start(c, state):
     await state.clear()
     await state.update_data(product_id=pid)
     await state.set_state(Expense.amount)
-    await c.message.edit_text(
+    await edit_message(c, 
         f"➕ <b>Новый расход</b>\n\nТовар: <b>{p['name']}</b>\n\n"
         "1/3. Введи сумму расхода в ₽:",
         parse_mode="HTML"
@@ -448,7 +454,7 @@ async def expense_who(c, state):
     await state.clear()
     p = get_product_for_user(pid, c.from_user.id)
     new_cost = cost(p)
-    await c.message.edit_text(
+    await edit_message(c, 
         f"✅ <b>Расход добавлен</b>\n\n"
         f"Товар: <b>{p['name']}</b>\n"
         f"Расход: <b>{money(d['amount'])}</b>\n"
@@ -464,13 +470,13 @@ async def table(c):
     pid=int(c.data.split(":")[1]); p=get_product_for_user(pid,c.from_user.id)
     if not p:return await c.answer("Не найдено",show_alert=True)
     kb=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="← К товару",callback_data=f"item:{pid}")]])
-    await c.message.edit_text(deal_table(p),reply_markup=kb,parse_mode="HTML"); await c.answer()
+    await edit_message(c, deal_table(p),reply_markup=kb,parse_mode="HTML"); await c.answer()
 
 @dp.callback_query(F.data=="add")
 async def add(c,state):
     ensure_business(c.from_user.id,c.from_user.full_name)
     await state.clear(); await state.set_state(Add.name)
-    await c.message.edit_text("➕ <b>Добавить товар</b>\n\n1/15. Название предмета?\nНапример: Nike Air Max",parse_mode="HTML"); await c.answer()
+    await edit_message(c, "➕ <b>Добавить товар</b>\n\n1/15. Название предмета?\nНапример: Nike Air Max",parse_mode="HTML"); await c.answer()
 
 @dp.message(Add.name)
 async def a1(m,state): await state.update_data(name=m.text.strip()); await state.set_state(Add.buy); await m.answer("2/15. 💰 Цена покупки (₽)?")
@@ -491,10 +497,10 @@ async def a4(m,state):
     await state.update_data(sale=v or None); await state.set_state(Add.status); await m.answer("5/15. Статус:",reply_markup=status_kb())
 @dp.callback_query(Add.status,F.data.startswith("st:"))
 async def a5(c,state):
-    await state.update_data(status=c.data[3:]); await state.set_state(Add.category); await c.message.edit_text("6/15. Категория:",reply_markup=category_kb()); await c.answer()
+    await state.update_data(status=c.data[3:]); await state.set_state(Add.category); await edit_message(c, "6/15. Категория:",reply_markup=category_kb()); await c.answer()
 @dp.callback_query(Add.category,F.data.startswith("cat:"))
 async def a6(c,state):
-    await state.update_data(category=c.data[4:]); await state.set_state(Add.date); await c.message.edit_text("7/15. 📅 Дата покупки?\nДД.ММ.ГГГГ или «сегодня»."); await c.answer()
+    await state.update_data(category=c.data[4:]); await state.set_state(Add.date); await edit_message(c, "7/15. 📅 Дата покупки?\nДД.ММ.ГГГГ или «сегодня»."); await c.answer()
 @dp.message(Add.date)
 async def a7(m,state):
     d=m.text.strip(); d=datetime.now().strftime("%d.%m.%Y") if d.lower()=="сегодня" else d
@@ -512,9 +518,9 @@ async def a10(c,state):
     n=int(c.data.split(":")[1]); await state.update_data(partner_count=n)
     if n==0:
         await state.set_state(Add.p1name); await state.update_data(p1="",p1_amount=0,p2="",p2_amount=0,p3="",p3_amount=0)
-        await c.message.edit_text("11/15. Таблица без участников.\nНапиши «-», чтобы продолжить.")
+        await edit_message(c, "11/15. Таблица без участников.\nНапиши «-», чтобы продолжить.")
     else:
-        await state.set_state(Add.p1name); await c.message.edit_text("11/15. Имя первого участника?\nНапример: Андрей")
+        await state.set_state(Add.p1name); await edit_message(c, "11/15. Имя первого участника?\nНапример: Андрей")
     await c.answer()
 @dp.message(Add.p1name)
 async def a11(m,state):
@@ -568,7 +574,7 @@ async def dele(c):
     pid=int(c.data[4:]); p=get_product_for_user(pid,c.from_user.id)
     if not p:return await c.answer("Товар не найден",show_alert=True)
     db=con(); db.execute("DELETE FROM products WHERE id=?",(pid,)); db.commit(); db.close()
-    await c.message.edit_text("🗑 Товар удалён из общего бизнеса.",reply_markup=home_kb()); await c.answer()
+    await edit_message(c, "🗑 Товар удалён из общего бизнеса.",reply_markup=home_kb()); await c.answer()
 
 @dp.callback_query(F.data.startswith("edit:"))
 async def edit_stub(c):
@@ -578,7 +584,7 @@ async def edit_stub(c):
 async def statistics(c):
     ensure_business(c.from_user.id,c.from_user.full_name)
     p,i,r,e,n=stats(c.from_user.id)
-    await c.message.edit_text(f"📊 <b>Общая статистика</b>\n\n🟢 Прибыль: <b>{money(p)}</b>\n🔵 Вложено: <b>{money(i)}</b>\n🟣 Выручка: <b>{money(r)}</b>\n🟠 Расходы: <b>{money(e)}</b>\n📦 Товаров: <b>{n}</b>",reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🏠 Главная",callback_data="home")]]),parse_mode="HTML"); await c.answer()
+    await edit_message(c, f"📊 <b>Общая статистика</b>\n\n🟢 Прибыль: <b>{money(p)}</b>\n🔵 Вложено: <b>{money(i)}</b>\n🟣 Выручка: <b>{money(r)}</b>\n🟠 Расходы: <b>{money(e)}</b>\n📦 Товаров: <b>{n}</b>",reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🏠 Главная",callback_data="home")]]),parse_mode="HTML"); await c.answer()
 
 @dp.callback_query(F.data=="profile")
 async def profile(c):
@@ -586,7 +592,7 @@ async def profile(c):
     b=get_business(c.from_user.id)
     ms=members(c.from_user.id)
     names=", ".join(x["name"] or str(x["user_id"]) for x in ms)
-    await c.message.edit_text(f"👤 <b>Профиль бизнеса</b>\n\n🤝 Участники: <b>{names}</b>\n💰 Валюта: <b>RUB (₽)</b>\n📦 Учёт: <b>общий для участников</b>\n\nВсе участники видят один список товаров и одну статистику.",reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🏠 Главная",callback_data="home")]]),parse_mode="HTML"); await c.answer()
+    await edit_message(c, f"👤 <b>Профиль бизнеса</b>\n\n🤝 Участники: <b>{names}</b>\n💰 Валюта: <b>RUB (₽)</b>\n📦 Учёт: <b>общий для участников</b>\n\nВсе участники видят один список товаров и одну статистику.",reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🏠 Главная",callback_data="home")]]),parse_mode="HTML"); await c.answer()
 
 async def main():
     init()
